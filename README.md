@@ -10,7 +10,7 @@ My personal notes, code, and solutions from the **[LLM Zoomcamp](https://github.
 
 | #   | Module                                                             | Topics                                         | Status         |
 | --- | ------------------------------------------------------------------ | ---------------------------------------------- | -------------- |
-| 1   | [Agentic RAG](#module-1-agentic-rag)                               | RAG pipeline, keyword search, function calling | ⬜ Not started |
+| 1   | [Agentic RAG](#module-1-agentic-rag)                               | RAG pipeline, keyword search, function calling | 🔄 In progress |
 | 2   | [Vector Search](#module-2-vector-search)                           | Embeddings, semantic search, PGVector          | ⬜ Not started |
 | 3   | [Orchestration](#module-3-orchestration)                           | AI orchestration with Kestra                   | ⬜ Not started |
 | —   | [Workshop: Data Ingestion](#workshop-data-ingestion)               | dlt, pulling traces for analytics              | ⬜ Not started |
