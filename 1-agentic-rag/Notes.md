@@ -290,6 +290,419 @@ def build_prompt(question, search_results):
 
 The prompt is the bridge between search and the LLM. A bad prompt lets the LLM ignore the context and hallucinate. Prompt engineering is iterative: later in the course, evaluation metrics replace guesswork.
 
+### 1.7 RAG Pipeline
+
+The last missing piece is the LLM. Combined with search and build prompt, it completes the full RAG pipeline.
+
+#### Responses API vs. Chat Completions
+
+OpenAI exposes two APIs:
+
+| API                | Status              | When to use                 |
+| ------------------ | ------------------- | --------------------------- |
+| `chat.completions` | Legacy              | Other providers, older code |
+| `responses`        | Current (preferred) | This course                 |
+
+```python
+response = openai_client.responses.create(
+    model="gpt-5.4-mini",
+    input=prompt
+)
+```
+
+**Note on other providers:** Groq, Gemini, and most third-party providers expose the Chat Completions interface, not Responses. If you switch providers, keep the OpenAI client but call `openai_client.chat.completions.create(...)` instead.
+
+#### The Response Object
+
+The answer is buried a few levels deep:
+
+```python
+response.output[0].content[0].text  # long path
+response.output_text                 # shortcut - same result
+```
+
+#### Token Usage and Cost
+
+```python
+response.usage
+# ResponseUsage(input_tokens=334, output_tokens=39, total_tokens=373)
+```
+
+Computing the cost for `gpt-5.4-mini`:
+
+```python
+input_price  = 0.75 / 1_000_000   # $ per token
+output_price = 4.50 / 1_000_000
+
+cost = (
+    response.usage.input_tokens  * input_price +
+    response.usage.output_tokens * output_price
+)
+```
+
+A typical RAG query costs a fraction of a cent. Cached input tokens (repeated prompt prefixes) are billed at a lower rate.
+
+#### Message History
+
+Instead of sending a single string, the API expects a list of messages with roles, the same structure ChatGPT uses internally to maintain conversation context:
+
+```python
+message_history = [
+    {"role": "developer", "content": INSTRUCTIONS},  # fixed system part
+    {"role": "user",      "content": prompt}          # changes per request
+]
+
+response = openai_client.responses.create(
+    model="gpt-5.4-mini",
+    input=message_history
+)
+```
+
+Both `developer` and `system` are accepted for the instruction role; in practice there is no observable difference. This course uses `developer`.
+
+#### The `llm` Function
+
+```python
+def llm(instructions, user_prompt, model="gpt-5.4-mini"):
+    message_history = [
+        {"role": "developer", "content": instructions},
+        {"role": "user",      "content": user_prompt}
+    ]
+    response = openai_client.responses.create(
+        model=model,
+        input=message_history
+    )
+    return response.output_text
+```
+
+#### Putting it All Together
+
+```python
+def rag(query, model="gpt-5.4-mini"):
+    search_results = search(query)
+    prompt         = build_prompt(query, search_results)
+    answer         = llm(INSTRUCTIONS, prompt, model=model)
+    return answer
+```
+
+```
+User question
+    → search()       → top-5 documents from minsearch
+    → build_prompt() → prompt with injected context
+    → llm()          → grounded answer
+```
+
+The three components are independent and swappable. Replacing `minsearch` with `sqlitesearch` later only requires changing `search()` - nothing else in the pipeline needs to change.
+
+### 1.8 RAG Helper
+
+The pipeline works, but the code is scattered across a notebook. Since we will reuse it throughout the course, we extract it into two reusable Python files.
+
+- `ingest.py` - loading data and building the search index
+- `rag_helper.py` - the RAG logic wrapped in a class
+
+#### ingest.py
+
+Two functions that handle everything needed before searching:
+
+```python
+import requests
+from minsearch import Index
+
+def load_faq_data():
+    docs_url = "https://datatalks.club/faq/json/courses.json"
+    response = requests.get(docs_url)
+    courses_raw = response.json()
+
+    documents = []
+    url_prefix = "https://datatalks.club/faq"
+
+    for course in courses_raw:
+        course_url = f"""{url_prefix}{course["path"]}"""
+        course_response = requests.get(course_url)
+        course_response.raise_for_status()
+        documents.extend(course_response.json())
+
+    return documents
+
+def build_index(documents):
+    index = Index(
+        text_fields=["question", "section", "answer"],
+        keyword_fields=["course"]
+    )
+    index.fit(documents)
+    return index
+```
+
+#### rag_helper.py - Why a Class?
+
+`index` and `openai_client` were global variables in the notebook. Moving the functions to a separate file breaks that. We could import those globals back, but that ties the file to one specific index and one specific client, making it hard to swap components later.
+
+The solution is **encapsulation**: put the dependencies into a class constructor. Now any index or client can be injected from outside. Subclassing later lets us override one component (e.g. swap OpenAI for a local model) without touching the rest.
+
+```python
+INSTRUCTIONS = """
+Your task is to answer questions from the course participants
+based on the provided context.
+
+Use the context to find relevant information and provide accurate
+answers. If the answer is not found in the context,
+respond with "I don't know."
+"""
+
+PROMPT_TEMPLATE = """
+QUESTION: {question}
+
+CONTEXT:
+{context}
+""".strip()
+```
+
+#### RAGBase
+
+```python
+class RAGBase:
+
+    def __init__(
+        self,
+        index,
+        llm_client,
+        instructions=INSTRUCTIONS,
+        prompt_template=PROMPT_TEMPLATE,
+        course="llm-zoomcamp",
+        model="gpt-5.4-mini"
+    ):
+        self.index = index
+        self.llm_client = llm_client
+        self.instructions = instructions
+        self.course = course
+        self.prompt_template = prompt_template
+        self.model = model
+
+    def search(self, query, num_results=5):
+        boost_dict = {"question": 3.0, "section": 0.5}
+        filter_dict = {"course": self.course}
+        return self.index.search(
+            query,
+            num_results=num_results,
+            boost_dict=boost_dict,
+            filter_dict=filter_dict
+        )
+
+    def build_context(self, search_results):
+        lines = []
+        for doc in search_results:
+            lines.append(doc["section"])
+            lines.append("Q: " + doc["question"])
+            lines.append("A: " + doc["answer"])
+            lines.append("")
+        return "\n".join(lines).strip()
+
+    def build_prompt(self, query, search_results):
+        context = self.build_context(search_results)
+        return self.prompt_template.format(question=query, context=context)
+
+    def llm(self, prompt):
+        input_messages = [
+            {"role": "developer", "content": self.instructions},
+            {"role": "user", "content": prompt}
+        ]
+        response = self.llm_client.responses.create(
+            model=self.model,
+            input=input_messages
+        )
+        return response.output_text
+
+    def rag(self, query):
+        search_results = self.search(query)
+        prompt = self.build_prompt(query, search_results)
+        return self.llm(prompt)
+```
+
+Only `index` and `llm_client` are required. All other parameters have sensible defaults and only need to be passed when overriding.
+
+#### Using it in a Notebook
+
+```python
+from dotenv import load_dotenv
+load_dotenv()
+
+from ingest import load_faq_data, build_index
+from rag_helper import RAGBase
+from openai import OpenAI
+
+documents = load_faq_data()
+index = build_index(documents)
+openai_client = OpenAI()
+
+assistant = RAGBase(index=index, llm_client=openai_client)
+
+answer = assistant.rag("I just discovered the course. Can I join now?")
+print(answer)
+```
+
+To override instructions:
+
+```python
+custom_instructions = """
+You're a course teaching assistant.
+Answer the QUESTION based on the CONTEXT from the FAQ database.
+Use only the facts from the CONTEXT when answering the QUESTION.
+""".strip()
+
+assistant = RAGBase(
+    index=index,
+    llm_client=openai_client,
+    instructions=custom_instructions,
+)
+```
+
+Swapping the search backend later only requires passing a different `index` object. Swapping the LLM only requires subclassing `RAGBase` and overriding `llm()`.
+
+### 1.9 Data Ingestion
+
+So far the RAG pipeline loads and indexes data at startup every time the process starts. With minsearch this is fine because the FAQ dataset is tiny. It breaks down as the dataset grows: indexing takes longer, and minsearch is in-memory so the data is gone the moment the process stops.
+
+The fix is to separate ingestion from querying. One process writes data to a persistent index once. Another process reads from it. They share nothing except the index file on disk.
+
+#### Why sqlitesearch
+
+SQLite ships with Python and has FTS5 (full-text search) built in. `sqlitesearch` is a thin wrapper around SQLite FTS5 that exposes the same API as minsearch, making it a drop-in replacement.
+
+```bash
+uv add sqlitesearch
+```
+
+No extra services needed. If you have Python, you have everything required.
+
+#### Ingestion Process
+
+A separate notebook (or script) fetches the data and writes it to a `.db` file:
+
+```python
+import time
+from ingest import load_faq_data
+from sqlitesearch import TextSearchIndex
+
+documents = load_faq_data()
+docs_llm = [doc for doc in documents if doc["course"] == "llm-zoomcamp"]
+
+index = TextSearchIndex(
+    text_fields=["question", "section", "answer"],
+    keyword_fields=["course"],
+    db_path="faq.db"
+)
+
+for doc in docs_llm:
+    index.add(doc)
+
+index.close()
+```
+
+`faq.db` persists on disk. Run this once; the query process never needs to re-ingest.
+
+Add `faq.db` to `.gitignore` - it's a binary file that should not be committed.
+
+#### Query Process
+
+The RAG assistant just connects to the existing database file:
+
+```python
+from sqlitesearch import TextSearchIndex
+from rag_helper import RAGBase
+from openai import OpenAI
+
+sqlite_index = TextSearchIndex(
+    text_fields=["question", "section", "answer"],
+    keyword_fields=["course"],
+    db_path="faq.db"
+)
+
+assistant = RAGBase(
+    index=sqlite_index,
+    llm_client=OpenAI(),
+)
+
+answer = assistant.rag("Can I still join the course after it started?")
+print(answer)
+```
+
+No `fit()`, no data loading, no waiting. The index is already there. Because `sqlitesearch` has the same `search()` interface as `minsearch`, `RAGBase` works unchanged.
+
+#### The Architecture
+
+```
+minsearch (single process):
+  startup: fetch -> parse -> index -> ready
+  every restart: repeat all steps
+
+sqlitesearch (two processes):
+  ingestion (once): fetch -> parse -> write to faq.db
+  query (every time): open faq.db -> search -> ready
+```
+
+The two processes are fully independent. One can be ingesting new documents while the other is answering queries - normal database behavior that is impossible with an in-memory index.
+
+#### When to Use Which
+
+|                  | minsearch                       | sqlitesearch                           |
+| ---------------- | ------------------------------- | -------------------------------------- |
+| Storage          | In-memory                       | File (SQLite)                          |
+| Survives restart | No                              | Yes                                    |
+| Setup            | None                            | Run ingestion once                     |
+| Use when         | Data is small, indexing is fast | Ingestion is slow or data must persist |
+
+For production systems the same pattern applies with a different backend (Elasticsearch, Qdrant, Weaviate). The architecture stays the same: one process ingests, another queries.
+
+### 1.10 Wrap-up of Part 1
+
+#### RAG in 3 Steps
+
+```mermaid
+flowchart LR
+    Q([User Question])
+    DB[(Knowledge Base)]
+    P[Build Prompt\nQuestion + Context]
+    LLM[LLM]
+    A([Answer])
+
+    Q -->|1. Retrieve| DB
+    DB -->|Top results| P
+    Q --> P
+    P -->|2. Augment| LLM
+    LLM -->|3. Generate| A
+```
+
+1. **Retrieve** - send the user's question to the knowledge base, get the top N relevant documents
+2. **Augment** - inject those documents into the prompt as context alongside the question
+3. **Generate** - the LLM reads the prompt and produces a grounded answer
+
+#### Ingestion vs. Querying
+
+The knowledge base does not fill itself. A separate ingestion process fetches, parses, and indexes the data. In Part 1 we ran both in the same notebook (fine for small datasets). In production they are split:
+
+```
+Ingestion process  ->  [Knowledge Base on disk]  <-  RAG assistant
+```
+
+The two processes are independent and connected only through the database. This is why sqlitesearch (or Elasticsearch, Qdrant, etc.) matters: it makes the index survive between restarts.
+
+#### What's Next
+
+**Part 2 (Agents):** The current pipeline is fixed - it always runs one search with the exact user query. An agent puts the LLM in control: it decides what to search for, how many times, and when enough context has been gathered.
+
+**Module 2 (Vector Search):** Keyword search matches exact words. Vector search matches by meaning, which handles cases where the user phrases things differently from the FAQ.
+
+#### Fine-tuning vs RAG
+
+Fine-tuning adjusts the model's weights for your data. It sounds appealing but has real drawbacks:
+
+- Requires GPUs and specialized tooling
+- Hard to update when new data arrives (re-train for every new FAQ entry?)
+- The model already has broad knowledge; RAG just gives it access to what it was not trained on
+
+RAG is more flexible, cheaper, and works with any LLM off the shelf. Reach for fine-tuning only when RAG genuinely cannot solve the problem.
+
 ## Part 2: Agents
 
 ## Homework
