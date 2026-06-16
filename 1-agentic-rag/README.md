@@ -385,11 +385,19 @@ def rag(query, model="gpt-5.4-mini"):
     return answer
 ```
 
-```
-User question
-    → search()       → top-5 documents from minsearch
-    → build_prompt() → prompt with injected context
-    → llm()          → grounded answer
+```mermaid
+flowchart LR
+    Q([User Question])
+    S[search]
+    BP[build_prompt]
+    L[llm]
+    A([Answer])
+
+    Q --> S
+    S -->|top-5 docs| BP
+    Q --> BP
+    BP --> L
+    L --> A
 ```
 
 The three components are independent and swappable. Replacing `minsearch` with `sqlitesearch` later only requires changing `search()` - nothing else in the pipeline needs to change.
@@ -631,14 +639,22 @@ No `fit()`, no data loading, no waiting. The index is already there. Because `sq
 
 #### The Architecture
 
+```mermaid
+flowchart LR
+    subgraph MIN["minsearch (single process, re-indexes on every restart)"]
+        F1[Fetch] --> P1[Parse] --> I1[Index] --> R1([Ready])
+    end
 ```
-minsearch (single process):
-  startup: fetch -> parse -> index -> ready
-  every restart: repeat all steps
 
-sqlitesearch (two processes):
-  ingestion (once): fetch -> parse -> write to faq.db
-  query (every time): open faq.db -> search -> ready
+```mermaid
+flowchart LR
+    subgraph ING["Ingestion (runs once)"]
+        F2[Fetch] --> P2[Parse] --> W[Write to faq.db]
+    end
+    subgraph QRY["Query (runs every time)"]
+        O[Open faq.db] --> S[Search] --> R2([Ready])
+    end
+    W --> O
 ```
 
 The two processes are fully independent. One can be ingesting new documents while the other is answering queries - normal database behavior that is impossible with an in-memory index.
@@ -681,8 +697,14 @@ flowchart LR
 
 The knowledge base does not fill itself. A separate ingestion process fetches, parses, and indexes the data. In Part 1 we ran both in the same notebook (fine for small datasets). In production they are split:
 
-```
-Ingestion process  ->  [Knowledge Base on disk]  <-  RAG assistant
+```mermaid
+flowchart LR
+    ING[Ingestion Process]
+    KB[(Knowledge Base)]
+    RAG[RAG Assistant]
+
+    ING -->|writes| KB
+    KB -->|reads| RAG
 ```
 
 The two processes are independent and connected only through the database. This is why sqlitesearch (or Elasticsearch, Qdrant, etc.) matters: it makes the index survive between restarts.
@@ -705,6 +727,329 @@ RAG is more flexible, cheaper, and works with any LLM off the shelf. Reach for f
 
 ## Part 2: Agents
 
+### 1.11 Agents
+
+#### The Problem with a Fixed Pipeline
+
+The RAG pipeline from Part 1 always follows the same flow:
+
+```mermaid
+flowchart LR
+    Q([User Query]) --> S[Search] --> P[Build Prompt] --> L[LLM] --> A([Answer])
+```
+
+This works when the user's query matches the documents closely. It breaks when it does not. A single typo in a lexical search returns nothing, and the LLM has no way to recover because the pipeline does not know the search failed. The same fixed flow runs regardless of the outcome.
+
+Examples of what can go wrong:
+
+- The user makes a typo ("Olama" instead of "Ollama")
+- The user phrases a question in an unusual way
+- The answer requires information from two different searches
+
+There is no second chance. The search runs once with the exact query the user typed, and the LLM gets whatever comes back, even if it is garbage.
+
+#### The Agent Approach
+
+Instead of a fixed sequence of steps, we hand control to the LLM.
+
+**Fixed pipeline:**
+
+```mermaid
+flowchart LR
+    Q([User Query]) --> S[Search] --> P[Build Prompt] --> L[LLM] --> A([Answer])
+```
+
+**Agentic pipeline:**
+
+```mermaid
+flowchart LR
+    Q([User Query]) --> L[LLM]
+    L -->|calls tool| T[Search]
+    T -->|results| L
+    L --> A([Answer])
+```
+
+The LLM receives:
+- instructions describing its role (help course participants find answers)
+- the user's question
+- a set of tools it can call (e.g. `search`)
+
+Now the LLM can reason about the query before acting. It can notice a typo and correct it before searching. It can search multiple times with different terms. It can ask the user a clarifying question. A fixed flow cannot do any of this.
+
+This is called **agentic RAG**: instead of hardcoding when and what to search, we let the LLM make those decisions.
+
+> An agent uses an LLM to decide which actions to take and in which order, rather than following a predetermined sequence.
+
+#### What Part 2 Covers
+
+- **Function calling:** how to give the LLM tools it can invoke
+- **The agentic loop:** the cycle where the LLM decides when to call a tool, which tool, and when to stop and return an answer
+- **Frameworks:** libraries that implement the loop so you don't have to build it from scratch
+
+Part 2 builds on the RAG pipeline from Part 1. Section 1.12 contains a quick revision if you need a refresher before continuing.
+
+### 1.12 Quick RAG Revision (Optional)
+
+This section is for people who either skipped Part 1 or need to set up the RAG helpers before starting Part 2.
+
+#### Getting the Helper Files
+
+If you completed Part 1, you already have these files. If not, download them:
+
+```bash
+wget https://raw.githubusercontent.com/DataTalksClub/llm-zoomcamp/main/01-agentic-rag/code/rag_helper.py
+wget https://raw.githubusercontent.com/DataTalksClub/llm-zoomcamp/main/01-agentic-rag/code/ingest.py
+```
+
+- `rag_helper.py`: the `RAGBase` class (search, prompt building, LLM call)
+- `ingest.py`: `load_faq_data()` and `build_index()` for loading the FAQ and creating a minsearch index
+
+#### Setting Up the RAG Assistant
+
+```python
+from dotenv import load_dotenv
+from openai import OpenAI
+
+load_dotenv()
+openai_client = OpenAI()
+```
+
+Load the data and build the index:
+
+```python
+from rag_helper import RAGBase
+from ingest import load_faq_data, build_index
+
+documents = load_faq_data()
+index = build_index(documents)
+```
+
+Create the assistant with instructions:
+
+```python
+instructions = """
+You're a course teaching assistant.
+Answer the QUESTION based on the CONTEXT from the FAQ database.
+Use only the facts from the CONTEXT when answering the QUESTION.
+""".strip()
+
+assistant = RAGBase(
+    index=index,
+    llm_client=openai_client,
+    instructions=instructions,
+)
+```
+
+#### Demonstrating the Limitation
+
+A correct query works fine:
+
+```python
+assistant.rag("How do I run Ollama locally?")
+# Returns a helpful answer based on FAQ entries about Ollama
+```
+
+Now introduce a typo:
+
+```python
+assistant.rag("How do I run Olama locally?")
+# "Olama" does not match "Ollama" in the lexical index
+# Search returns nothing useful -> LLM says "I don't know"
+```
+
+This is the core problem. The pipeline runs once with whatever the user typed. There is no correction, no retry, no fallback. The LLM gets bad context and cannot recover.
+
+The next sections introduce function calling and the agentic loop to fix exactly this.
+
+### 1.13 Function Calling
+
+Function calling is the mechanism that lets the LLM decide when and how to use a tool. It is the technical foundation of everything agentic.
+
+#### Without Tools
+
+Sending a course-specific question to the LLM without any tools returns a generic answer drawn from its training data:
+
+```python
+messages = [
+    {"role": "user", "content": "I just discovered the course. Can I join it?"}
+]
+
+response = openai_client.responses.create(
+    model="gpt-5.4-mini",
+    input=messages,
+)
+response.output_text
+# "It depends on the course. You should check the course website..."
+```
+
+The model has no idea which course is meant. It gives a vague, generic reply. This is the exact problem RAG was designed to solve, and why we now want to hand the model a tool.
+
+#### Defining the Tool
+
+We describe the `search` function to the model in JSON. The model does not see Python code; it only sees this schema. This makes the definition language-agnostic: the same schema works from TypeScript, Java, or any other client.
+
+```python
+def search(query):
+    boost_dict = {"question": 3.0, "section": 0.5}
+    filter_dict = {"course": "llm-zoomcamp"}
+    return index.search(
+        query,
+        num_results=5,
+        boost_dict=boost_dict,
+        filter_dict=filter_dict
+    )
+
+search_tool = {
+    "type": "function",
+    "name": "search",
+    "description": "Search the FAQ database for entries matching the given query.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Search query text to look up in the course FAQ."
+            }
+        },
+        "required": ["query"],
+        "additionalProperties": False
+    }
+}
+```
+
+The `description` field is the most important part. The model reads it to decide when to call the function. `required: ["query"]` ensures the model always provides a query argument.
+
+#### Sending the Question with the Tool
+
+We send the same request, but add `tools=[search_tool]`:
+
+```python
+response = openai_client.responses.create(
+    model="gpt-5.4-mini",
+    input=messages,
+    tools=[search_tool],
+)
+response.output
+```
+
+The response no longer contains an answer. Instead it contains a `function_call` entry: the model decided it needs to search before it can answer.
+
+**Key observation:** the model does not pass the user's question verbatim as the search query. It rewrites it. The question "I just discovered the course. Can I still join it?" becomes something like `"join course discovered late enroll"`. The model is already acting as a smarter intermediary.
+
+#### Executing the Function
+
+Extract the arguments, call the function, and serialize the result:
+
+```python
+import json
+
+call = response.output[0]
+args = json.loads(call.arguments)
+
+results = search(**args)
+result_json = json.dumps(results, indent=2)
+```
+
+#### Sending Results Back
+
+LLMs are stateless. Each API call starts from scratch. To give the model context, we must send the full conversation history: original question, the model's decision to call the tool, and the tool output.
+
+```python
+messages.extend(response.output)       # add model's function_call decision
+
+messages.append({
+    "type": "function_call_output",
+    "call_id": call.call_id,           # links this result to that specific call
+    "output": result_json,
+})
+```
+
+`call_id` matters when the model makes multiple tool calls in one turn; each result needs to be matched back to its request.
+
+#### The Full Flow
+
+The instructor's own summary from the session notebook:
+
+```
+1. make a call to the LLM             <-- we pay
+2. LLM decides to invoke search(...)
+3. we invoke search, we have results
+4. send results back to the LLM       <-- another call, we pay again
+5. LLM processes the results
+6. LLM gives the answer
+
+2 requests sent to the LLM
+```
+
+```python
+response = openai_client.responses.create(
+    model="gpt-5.4-mini",
+    input=messages,      # full history: question + function_call + tool output
+    tools=[search_tool],
+)
+response.output_text
+# "Yes, you can still join. However, to receive a certificate..."
+```
+
+Compared to plain RAG (one API call), one tool use costs two calls. With more tools or multiple retries, the count grows further.
+
+```mermaid
+flowchart TD
+    U([User Question])
+    L1[LLM - call 1]
+    FC[function_call: search query]
+    S[search]
+    R[results]
+    L2[LLM - call 2]
+    A([Answer])
+
+    U --> L1
+    L1 --> FC
+    FC --> S
+    S --> R
+    R --> L2
+    L2 --> A
+```
+
+#### An Agent Has Three Parts
+
+From the transcript:
+
+- **Task:** what the agent is supposed to do (help the user find answers)
+- **Memory:** the full message history sent on each call - the only "memory" the stateless model has
+- **Tools:** the functions the model can invoke to carry out the task
+
+#### Token Usage and Cost
+
+Every call has its own usage. The second call is more expensive than the first because the full history is resent as input.
+
+```python
+def calculate_gpt54mini_price(input_tokens, output_tokens):
+    INPUT_PRICE_PER_MILLION  = 0.15
+    OUTPUT_PRICE_PER_MILLION = 0.60
+
+    input_cost  = (input_tokens  / 1_000_000) * INPUT_PRICE_PER_MILLION
+    output_cost = (output_tokens / 1_000_000) * OUTPUT_PRICE_PER_MILLION
+
+    return {
+        "input_cost":  input_cost,
+        "output_cost": output_cost,
+        "total_cost":  input_cost + output_cost,
+    }
+
+result = calculate_gpt54mini_price(
+    response.usage.input_tokens,
+    response.usage.output_tokens
+)
+print("Cost of second call: $", round(result["total_cost"], 8))
+```
+
+This is only the second call. The first call also cost something. Both need to be tracked. As the agent loop grows, costs accumulate fast because every call resends the entire history as input tokens.
+
 ## Homework
+
+## Optional
+
+## Optional
 
 ## Optional

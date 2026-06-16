@@ -10,7 +10,7 @@ My personal notes, code, and solutions from the **[LLM Zoomcamp](https://github.
 
 | #   | Module                                                             | Topics                                         | Status         |
 | --- | ------------------------------------------------------------------ | ---------------------------------------------- | -------------- |
-| 1   | [Agentic RAG](#module-1-agentic-rag)                               | RAG pipeline, keyword search, function calling | 🔄 In progress |
+| 1   | [Agentic RAG](1-agentic-rag/README.md)                             | RAG pipeline, keyword search, function calling | 🔄 In progress |
 | 2   | [Vector Search](#module-2-vector-search)                           | Embeddings, semantic search, PGVector          | ⬜ Not started |
 | 3   | [Orchestration](#module-3-orchestration)                           | AI orchestration with Kestra                   | ⬜ Not started |
 | —   | [Workshop: Data Ingestion](#workshop-data-ingestion)               | dlt, pulling traces for analytics              | ⬜ Not started |
@@ -26,14 +26,12 @@ My personal notes, code, and solutions from the **[LLM Zoomcamp](https://github.
 
 ## Module 1: Agentic RAG
 
-> **Course material:** [01-agentic-rag](https://github.com/DataTalksClub/llm-zoomcamp/tree/main/01-agentic-rag)
-
 **Topics covered:**
 - Building a RAG pipeline with keyword search
 - Making it agentic with function calling
 
 **My work:**
-- [ ] Notes / summary
+- [Notes](1-agentic-rag/README.md)
 - [ ] Homework
 
 ---
