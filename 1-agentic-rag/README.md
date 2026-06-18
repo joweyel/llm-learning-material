@@ -788,7 +788,7 @@ This is called **agentic RAG**: instead of hardcoding when and what to search, w
 
 Part 2 builds on the RAG pipeline from Part 1. Section 1.12 contains a quick revision if you need a refresher before continuing.
 
-### 1.12 Quick RAG Revision (Optional)
+### 1.12 Quick RAG Revision
 
 This section is for people who either skipped Part 1 or need to set up the RAG helpers before starting Part 2.
 
@@ -1046,10 +1046,325 @@ print("Cost of second call: $", round(result["total_cost"], 8))
 
 This is only the second call. The first call also cost something. Both need to be tracked. As the agent loop grows, costs accumulate fast because every call resends the entire history as input tokens.
 
+### 1.14 The Agentic Loop
+
+In 1.13 we did function calling by hand: one call, one tool result, one final call. That only works when we know in advance the model will search exactly once. We don't. The model might want to search several times, retry with different keywords, or decide it has enough after the first attempt. We need a loop that keeps going until the model stops asking for tools.
+
+```mermaid
+flowchart TD
+    Q([User Question])
+    CALL[Call LLM]
+    CHECK{function_call\nin response?}
+    RUN[Run tool, append result to history]
+    ANS([Return Answer])
+
+    Q --> CALL
+    CALL --> CHECK
+    CHECK -->|yes| RUN
+    RUN --> CALL
+    CHECK -->|no| ANS
+```
+
+#### Agent Anatomy
+
+An agent has three parts:
+
+- **Instructions:** the `developer` message defining the agent's role and behavior. The better the instructions, the better the agent performs.
+- **Tools:** the functions the model can invoke to carry out the task. For now, just `search`.
+- **Memory:** the full message history sent on every call. It is the only state the stateless model has; without it, it cannot know what it already tried.
+
+#### The Developer Prompt
+
+We add a `developer` message that gives the agent a role and explicitly pushes it to search more than once:
+
+```python
+instructions = """
+You're a course teaching assistant.
+You're given a question from a course student and your task is to answer it.
+
+If you want to look up information, use the search function.
+Use as many keywords from the user question as possible when making first requests.
+
+Make multiple searches. First perform search, analyze the results
+and then perform more searches.
+
+At the end, ask if there are other areas that the user wants to explore.
+""".strip()
+```
+
+#### The make_call Helper
+
+Each tool call in the response needs to be dispatched and its result serialized back into the history:
+
+```python
+def make_call(call):
+    args = json.loads(call.arguments)
+
+    if call.name == "search":
+        result = search(**args)
+
+    result_json = json.dumps(result, indent=2)
+
+    return {
+        "type": "function_call_output",
+        "call_id": call.call_id,
+        "output": result_json,
+    }
+```
+
+When more tools are added, this helper grows more `if` branches. The `call_id` links each result back to the specific function call the model requested.
+
+#### The Full Agent Loop
+
+```python
+def agent_loop(instructions, question, model="gpt-5.4-mini") -> str:
+    messages = [
+        {"role": "developer", "content": instructions},
+        {"role": "user",      "content": question},
+    ]
+
+    it = 1
+
+    while True:
+        print(f"iteration #{it}...")
+        has_function_calls = False
+
+        response = openai_client.responses.create(
+            model=model,
+            input=messages,
+            tools=[search_tool],
+        )
+
+        messages.extend(response.output)
+
+        for item in response.output:
+            if item.type == "function_call":
+                print("function_call:", item.name, item.arguments)
+                call_output = make_call(item)
+                messages.append(call_output)
+                has_function_calls = True
+
+            elif item.type == "message":
+                print("ASSISTANT:")
+                last_answer = item.content[0].text
+                print(last_answer)
+
+        it += 1
+        if not has_function_calls:
+            break
+
+    return last_answer
+```
+
+The loop keeps sending the full message history to the model until a response comes back with no function calls. At that point `has_function_calls` stays `False` and we break.
+
+#### The Exit Condition
+
+No function calls in this response means the model is done. If `item.type == "function_call"` never triggers, the loop breaks.
+
+Other safety nets to layer on top:
+
+- **Max iterations:** cap at N turns, force a final answer on the last one
+- **Token budget:** break when cumulative token usage exceeds a threshold
+- **Wall-clock timeout:** stop after a fixed number of seconds
+
+The core is always the same flag. Every agent framework (LangChain, PydanticAI, OpenAI Agents SDK) wraps this exact loop under the hood.
+
+#### Typo Recovery in Action
+
+```python
+agent_loop(instructions, "How do I run Olama locally?")
+# iteration #1: function_call: search {"query": "Olama locally"}  -> no results
+# iteration #2: function_call: search {"query": "Ollama locally"} -> found results
+# iteration #3: ASSISTANT: Here's how to run Ollama...
+```
+
+The agent searched, saw nothing useful, corrected the spelling itself, and searched again. No special typo-handling code was written.
+
+#### Steering the Agent via Instructions
+
+Instructions are the main control surface. Two examples:
+
+**Restricting to course-only questions:**
+
+```python
+instructions = """
+...
+The question has to be about the course or its logistics. Off-topic questions
+shouldn't be answered. If the search returns nothing, it's likely an off-topic question.
+If you can't answer the question using the FAQ, don't do it yourself. Only use the
+facts from the FAQ database.
+...
+""".strip()
+
+agent_loop(instructions, "What's the Queen's Gambit?")
+# ASSISTANT: I can only answer questions about the course. This appears to be off-topic.
+```
+
+This is a lightweight input guardrail via instructions. A real guardrail checks the input before the agent runs and can block off-topic questions outright. Instructions are the first and cheapest place to start.
+
+The search query the model submits is visible in the logs (`item.arguments`). You can watch how the model rewrites and expands queries across iterations instead of just passing the user's words verbatim.
+
+### 1.15 ToyAIKit
+
+The handwritten loop from 1.14 is educational but repetitive. Every new agent means rewriting the same `while True`, the same function-call dispatch, the same history management. Frameworks abstract that away.
+
+#### Why ToyAIKit
+
+The instructor built ToyAIKit during an earlier DataTalks.Club workshop. It is used here because:
+
+- It wraps exactly the loop we wrote by hand - no magic, easy to read
+- It adds interactive display (Jupyter widgets, cost tracking, multi-turn chat)
+- It is small enough to inspect when something breaks
+
+**It is NOT for production.** Once you understand what it does, use a production framework of your choice.
+
+#### Installation and Imports
+
+```bash
+uv add toyaikit
+```
+
+```python
+from toyaikit.llm import OpenAIClient
+from toyaikit.tools import Tools
+from toyaikit.chat import IPythonChatInterface
+from toyaikit.chat.runners import OpenAIResponsesRunner, DisplayingRunnerCallback
+```
+
+#### Registering Tools - Manual vs Auto Schema
+
+**Manual** (what we did in 1.13 - pass function + schema explicitly):
+
+```python
+agent_tools = Tools()
+agent_tools.add_tool(search, search_tool)
+```
+
+**Auto** (what all real frameworks do - derive the schema from type hints and docstring):
+
+```python
+def search(query: str) -> list[dict[str, str]]:
+    """
+    Search the FAQ database for entries matching the given query.
+    """
+    return index.search(
+        query,
+        num_results=5,
+        boost_dict={"question": 3.0, "section": 0.5},
+        filter_dict={"course": "llm-zoomcamp"},
+    )
+
+agent_tools = Tools()
+agent_tools.add_tool(search)   # no schema needed
+```
+
+ToyAIKit reads the function name, parameter types, and docstring and produces the same JSON schema we wrote by hand. Every production framework (OpenAI Agents SDK, PydanticAI, LangChain, Google ADK) does this exact same trick. Write the tool as a typed Python function with a docstring and the framework handles the schema.
+
+```python
+agent_tools.get_tools()   # inspect the generated schema
+```
+
+#### Building the Runner
+
+```python
+chat_interface = IPythonChatInterface()
+callback = DisplayingRunnerCallback(chat_interface)
+
+runner = OpenAIResponsesRunner(
+    tools=agent_tools,
+    developer_prompt=instructions,
+    chat_interface=chat_interface,
+    llm_client=OpenAIClient(model="gpt-5.4-mini"),
+)
+```
+
+The runner is the agent. It holds the tools, the instructions, and the LLM client. Internally it runs the same `while True` loop we wrote in 1.14.
+
+#### Running a Single Prompt
+
+```python
+result = runner.loop(
+    prompt="How do I run Olama locally?",
+    callback=callback,
+)
+```
+
+The notebook output shows each iteration inline: which tool was called, with what query, and what it returned. The typo gets corrected and the answer comes back.
+
+`result` contains:
+
+```python
+result.cost          # total cost across all LLM calls in this loop
+result.all_messages  # full message history (same list we maintained by hand)
+```
+
+#### Multi-turn Conversations
+
+Pass the previous result's history as `previous_messages` on the next call:
+
+```python
+result2 = runner.loop(
+    prompt="How do I run a different model?",
+    previous_messages=result.all_messages,
+    callback=callback,
+)
+```
+
+The agent now knows "a different model" refers to Ollama because the previous turn is in memory. Without `previous_messages` it would have no context.
+
+#### Interactive Chat
+
+```python
+runner.run()
+```
+
+Opens an input loop in the notebook. Type questions and get answers. Type `stop` to exit. The full conversation history is maintained across turns automatically.
+
+### 1.16 Other Frameworks
+
+The concepts from Part 2 are the same across every framework: function calling, the agent loop, tool definitions. They all wrap the same pattern - send messages, run tool calls, repeat until the model is done. Now that you understand the loop, you can pick up any framework and know what it is doing under the hood.
+
+#### Production Frameworks
+
+| Framework                 | Install                | Best for                                                                                                   |
+| ------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **OpenAI Agents SDK**     | `uv add openai-agents` | Already on OpenAI, want an official well-maintained SDK that uses the same Responses API                   |
+| **PydanticAI**            | `uv add pydantic-ai`   | Type safety, multi-provider support                                                                        |
+| **LangChain / LangGraph** | `uv add langchain`     | Many integrations (vector stores, document loaders), large community; LangGraph adds graph-based workflows |
+| **Google ADK**            | -                      | Gemini models or Google Cloud stack                                                                        |
+
+Others worth knowing: CrewAI (multi-agent orchestration), AutoGen (Microsoft, multi-agent conversations), Semantic Kernel (Microsoft, C# and Python), Smolagents (HuggingFace, lightweight), Anthropic Tool Use (native Claude tool API).
+
+Every one of them auto-generates tool schemas from typed Python functions with docstrings - the same trick ToyAIKit demonstrated.
+
+#### When NOT to Use an Agent
+
+Adding an agent comes with real costs:
+
+- **More API calls:** the loop can fire many tool calls before the model is satisfied
+- **Higher latency:** each round-trip waits on the model
+- **More money:** every iteration is another billed call, and the full history is re-sent each turn
+- **Less predictable:** the LLM decides what to do; two runs of the same prompt can take different paths
+- **More operational overhead:** you now monitor cost, iteration count, and runaway loops
+
+Try these simpler approaches first:
+
+1. Plain RAG - one search, one answer
+2. A single LLM call with no tools
+3. Parsing or transforming a document into another form
+
+If the simpler solution works, ship it. Reach for the agent loop only when you have tried the simpler approach and it genuinely cannot handle the problem. By then you will know the extra complexity is justified.
+
+#### Module Wrap-up
+
+The full arc of Module 1:
+
+- **Plain RAG** - rigid fixed flow: retrieve, augment, generate
+- **Limitation** - one search with the exact user query, no recovery from bad results
+- **Agentic RAG** - LLM in control: decides what to search, how many times, when to stop
+- **Agent = instructions + tools + memory**
+
+The loop is always the same. The hard part is designing good tools and prompts.
+
 ## Homework
-
-## Optional
-
-## Optional
-
-## Optional
