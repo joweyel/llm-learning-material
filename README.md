@@ -1,6 +1,6 @@
-# LLM Zoomcamp — Learning Progress
+# LLM Zoomcamp: Learning Progress
 
-My personal notes, code, and solutions from the **[LLM Zoomcamp](https://github.com/DataTalksClub/llm-zoomcamp)** by [DataTalks.Club](https://datatalks.club/) — a free, hands-on 10-week course on building production-ready LLM applications with RAG, Agents, and Vector Search.
+My personal notes, code, and solutions from the **[LLM Zoomcamp](https://github.com/DataTalksClub/llm-zoomcamp)** by [DataTalks.Club](https://datatalks.club/), a free, hands-on 10-week course on building production-ready LLM applications with RAG, Agents, and Vector Search.
 
 > **Cohort:** 2026 (started June 8, 2026)
 
@@ -10,15 +10,15 @@ My personal notes, code, and solutions from the **[LLM Zoomcamp](https://github.
 
 | #   | Module                                                             | Topics                                         | Status         |
 | --- | ------------------------------------------------------------------ | ---------------------------------------------- | -------------- |
-| 1   | [Agentic RAG](1-agentic-rag/README.md)                             | RAG pipeline, keyword search, function calling | 🔄 In progress |
-| 2   | [Vector Search](#module-2-vector-search)                           | Embeddings, semantic search, PGVector          | ⬜ Not started |
+| 1   | [Agentic RAG](1-agentic-rag/README.md)                             | RAG pipeline, keyword search, function calling | ✅ Done        |
+| 2   | [Vector Search](2-vector-search/README.md)                         | Embeddings, semantic search, PGVector          | 🔄 In progress |
 | 3   | [Orchestration](#module-3-orchestration)                           | AI orchestration with Kestra                   | ⬜ Not started |
-| —   | [Workshop: Data Ingestion](#workshop-data-ingestion)               | dlt, pulling traces for analytics              | ⬜ Not started |
+|     | [Workshop: Data Ingestion](#workshop-data-ingestion)               | dlt, pulling traces for analytics              | ⬜ Not started |
 | 4   | [Evaluation](#module-4-evaluation)                                 | Retrieval & answer quality, LLM-as-a-Judge     | ⬜ Not started |
 | 5   | [Monitoring](#module-5-monitoring)                                 | User feedback, dashboards, system health       | ⬜ Not started |
 | 6   | [Best Practices](#module-6-best-practices)                         | LangChain, hybrid search, reranking            | ⬜ Not started |
 | 7   | [End-to-End Project Example](#module-7-end-to-end-project-example) | Complete fitness assistant walkthrough         | ⬜ Not started |
-| —   | [Capstone Project](#capstone-project)                              | Build & ship your own RAG application          | ⬜ Not started |
+|     | [Capstone Project](#capstone-project)                              | Build & ship your own RAG application          | ⬜ Not started |
 
 **Legend:** ✅ Done |  🔄 In progress | ⬜ Not started
 
@@ -31,8 +31,8 @@ My personal notes, code, and solutions from the **[LLM Zoomcamp](https://github.
 - Making it agentic with function calling
 
 **My work:**
-- [Notes](1-agentic-rag/README.md)
-- [ ] Homework
+- [Notes](./1-agentic-rag/README.md)
+- [x] [Homework](./1-agentic-rag/homework/hw-agentic-rag.ipynb)
 
 ---
 
@@ -45,7 +45,8 @@ My personal notes, code, and solutions from the **[LLM Zoomcamp](https://github.
 - minsearch, sqlitesearch, and PGVector
 
 **My work:**
-- [ ] Notes / summary
+- [Notes](./2-vector-search/README.md)
+- [Code](./2-vector-search/code/vector_search.ipynb)
 - [ ] Homework
 
 ---

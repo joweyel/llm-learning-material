@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 274" width="900" height="397">
+
+  <!-- Background -->
+  <rect width="620" height="274" fill="#1e1e2e" rx="12"/>
+
+  <!-- ============================================================ -->
+  <!-- Panel 1: cos ≈ 1 (similar, small angle) -->
+  <!-- ============================================================ -->
+  <g transform="translate(105,175)">
+    <!-- Unit circle -->
+    <circle cx="0" cy="0" r="80" fill="none" stroke="#2a2a44" stroke-width="1.2"/>
+    <!-- Axes -->
+    <line x1="-88" y1="0" x2="88" y2="0" stroke="#33334a" stroke-width="1"/>
+    <line x1="0" y1="-88" x2="0" y2="88" stroke="#33334a" stroke-width="1"/>
+
+    <!-- Vector A (angle 20 deg) -->
+    <line x1="0" y1="0" x2="75" y2="-27" stroke="#4a9eff" stroke-width="2.5"/>
+    <polygon points="75,-27 63,-28 66,-18" fill="#4a9eff"/>
+    <text x="78" y="-28" fill="#88ccff" font-size="11" font-family="monospace" font-weight="bold">A</text>
+
+    <!-- Vector B (angle 5 deg) -->
+    <line x1="0" y1="0" x2="80" y2="-7" stroke="#52c4a0" stroke-width="2.5"/>
+    <polygon points="80,-7 68,-12 69,-2" fill="#52c4a0"/>
+    <text x="82" y="-5" fill="#88ddcc" font-size="11" font-family="monospace" font-weight="bold">B</text>
+
+    <!-- Arc showing small angle -->
+    <path d="M 28,0 A 28,28 0 0,0 26,-10" fill="none" stroke="#aaaacc" stroke-width="1.2"/>
+    <text x="30" y="-6" fill="#aaaacc" font-size="9" font-family="sans-serif">θ≈15°</text>
+
+    <!-- cos value -->
+    <text x="-78" y="-62" fill="#4a9eff" font-size="13" font-family="monospace" font-weight="bold">cos(θ) ≈ 1</text>
+    <text x="-78" y="-49" fill="#667788" font-size="10" font-family="sans-serif">vectors nearly</text>
+    <text x="-78" y="-39" fill="#667788" font-size="10" font-family="sans-serif">parallel</text>
+
+    <!-- Label -->
+    <rect x="-78" y="-122" width="156" height="22" fill="#1a3d2a" rx="4" stroke="#3a7a52" stroke-width="1"/>
+    <text x="0" y="-107" fill="#52c4a0" font-size="11" font-family="sans-serif" font-weight="bold" text-anchor="middle">semantically similar</text>
+  </g>
+
+  <!-- Divider -->
+  <line x1="210" y1="30" x2="210" y2="268" stroke="#2a2a40" stroke-width="1"/>
+
+  <!-- ============================================================ -->
+  <!-- Panel 2: cos = 0 (orthogonal, unrelated) -->
+  <!-- ============================================================ -->
+  <g transform="translate(310,175)">
+    <circle cx="0" cy="0" r="80" fill="none" stroke="#2a2a44" stroke-width="1.2"/>
+    <line x1="-88" y1="0" x2="88" y2="0" stroke="#33334a" stroke-width="1"/>
+    <line x1="0" y1="-88" x2="0" y2="88" stroke="#33334a" stroke-width="1"/>
+
+    <!-- Vector A (pointing right) -->
+    <line x1="0" y1="0" x2="80" y2="0" stroke="#4a9eff" stroke-width="2.5"/>
+    <polygon points="80,0 68,-5 68,5" fill="#4a9eff"/>
+    <text x="82" y="4" fill="#88ccff" font-size="11" font-family="monospace" font-weight="bold">A</text>
+
+    <!-- Vector B (pointing up) -->
+    <line x1="0" y1="0" x2="0" y2="-80" stroke="#e07b5a" stroke-width="2.5"/>
+    <polygon points="0,-80 -5,-68 5,-68" fill="#e07b5a"/>
+    <text x="5" y="-82" fill="#ffaa88" font-size="11" font-family="monospace" font-weight="bold">B</text>
+
+    <!-- Right-angle marker -->
+    <path d="M 14,0 L 14,-14 L 0,-14" fill="none" stroke="#aaaacc" stroke-width="1.2"/>
+    <text x="16" y="-16" fill="#aaaacc" font-size="9" font-family="sans-serif">90°</text>
+
+    <!-- cos value -->
+    <text x="-78" y="-62" fill="#aaaacc" font-size="13" font-family="monospace" font-weight="bold">cos(θ) = 0</text>
+    <text x="-78" y="-49" fill="#667788" font-size="10" font-family="sans-serif">vectors</text>
+    <text x="-78" y="-39" fill="#667788" font-size="10" font-family="sans-serif">orthogonal</text>
+
+    <!-- Label -->
+    <rect x="-78" y="-122" width="156" height="22" fill="#2a1e1a" rx="4" stroke="#6a3a2a" stroke-width="1"/>
+    <text x="0" y="-107" fill="#cc8866" font-size="11" font-family="sans-serif" font-weight="bold" text-anchor="middle">unrelated</text>
+  </g>
+
+  <!-- Divider -->
+  <line x1="415" y1="30" x2="415" y2="268" stroke="#2a2a40" stroke-width="1"/>
+
+  <!-- ============================================================ -->
+  <!-- Panel 3: cos ≈ -1 (opposite) - rarely seen in practice -->
+  <!-- ============================================================ -->
+  <g transform="translate(515,175)">
+    <circle cx="0" cy="0" r="80" fill="none" stroke="#2a2a44" stroke-width="1.2"/>
+    <line x1="-88" y1="0" x2="88" y2="0" stroke="#33334a" stroke-width="1"/>
+    <line x1="0" y1="-88" x2="0" y2="88" stroke="#33334a" stroke-width="1"/>
+
+    <!-- Vector A (pointing right) -->
+    <line x1="0" y1="0" x2="78" y2="-8" stroke="#4a9eff" stroke-width="2.5"/>
+    <polygon points="78,-8 66,-12 67,-2" fill="#4a9eff"/>
+    <text x="80" y="-6" fill="#88ccff" font-size="11" font-family="monospace" font-weight="bold">A</text>
+
+    <!-- Vector B (pointing left, nearly opposite) -->
+    <line x1="0" y1="0" x2="-76" y2="12" stroke="#cc4444" stroke-width="2.5"/>
+    <polygon points="-76,12 -64,8 -65,18" fill="#cc4444"/>
+    <text x="-88" y="14" fill="#ff8888" font-size="11" font-family="monospace" font-weight="bold">B</text>
+
+    <!-- Arc showing angle ~170 deg -->
+    <path d="M 30,0 A 30,30 0 1,0 -28,7" fill="none" stroke="#aaaacc" stroke-width="1" stroke-dasharray="3,2"/>
+    <text x="-14" y="-34" fill="#aaaacc" font-size="9" font-family="sans-serif">θ≈170°</text>
+
+    <!-- cos value -->
+    <text x="-78" y="-62" fill="#cc4444" font-size="13" font-family="monospace" font-weight="bold">cos(θ) ≈ -1</text>
+    <text x="-78" y="-49" fill="#667788" font-size="10" font-family="sans-serif">vectors nearly</text>
+    <text x="-78" y="-39" fill="#667788" font-size="10" font-family="sans-serif">anti-parallel</text>
+
+    <!-- Label -->
+    <rect x="-78" y="-122" width="156" height="22" fill="#2a1a1a" rx="4" stroke="#6a2a2a" stroke-width="1"/>
+    <text x="0" y="-107" fill="#ff8888" font-size="11" font-family="sans-serif" font-weight="bold" text-anchor="middle">rare in practice</text>
+  </g>
+
+  <!-- Title -->
+  <text x="310" y="22" fill="#8888aa" font-size="12" font-family="sans-serif" text-anchor="middle" font-weight="bold">Cosine Similarity on the Unit Circle</text>
+
+</svg>

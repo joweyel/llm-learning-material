@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="115 78 395 302" width="570" height="435">
+
+  <!-- Background -->
+  <rect width="570" height="435" fill="#1e1e2e" rx="12"/>
+
+  <!-- Floor polygon (z=0 plane) -->
+  <polygon points="290,255 401,319 290,383 179,319"
+           fill="#18182a" stroke="#2a2a44" stroke-width="1.2"/>
+
+  <!-- Floor grid lines -->
+  <g stroke="#252538" stroke-width="0.8">
+    <line x1="318" y1="271" x2="207" y2="335"/>
+    <line x1="345" y1="287" x2="235" y2="351"/>
+    <line x1="373" y1="303" x2="262" y2="367"/>
+    <line x1="262" y1="271" x2="373" y2="335"/>
+    <line x1="235" y1="287" x2="345" y2="351"/>
+    <line x1="207" y1="303" x2="318" y2="367"/>
+  </g>
+
+  <!-- Axes -->
+  <line x1="290" y1="255" x2="396" y2="315" stroke="#3a5a8a" stroke-width="1.8"/>
+  <polygon points="401,319 390,312 393,321" fill="#3a5a8a"/>
+  <text x="408" y="323" fill="#5a8acc" font-size="12" font-family="monospace">x</text>
+
+  <line x1="290" y1="255" x2="184" y2="315" stroke="#3a5a8a" stroke-width="1.8"/>
+  <polygon points="179,319 190,312 187,321" fill="#3a5a8a"/>
+  <text x="158" y="323" fill="#5a8acc" font-size="12" font-family="monospace">y</text>
+
+  <line x1="290" y1="255" x2="290" y2="100" stroke="#3a5a8a" stroke-width="1.8"/>
+  <polygon points="290,95 284,107 296,107" fill="#3a5a8a"/>
+  <text x="296" y="93" fill="#5a8acc" font-size="12" font-family="monospace">z</text>
+
+  <!-- Drop lines: enrollment cluster (to floor) -->
+  <g stroke="#304050" stroke-width="0.8" stroke-dasharray="3,2">
+    <line x1="246" y1="239" x2="246" y2="319"/>
+    <line x1="248" y1="260" x2="248" y2="327"/>
+    <line x1="246" y1="223" x2="246" y2="313"/>
+    <line x1="248" y1="250" x2="248" y2="324"/>
+    <line x1="246" y1="210" x2="246" y2="306"/>
+    <line x1="246" y1="229" x2="246" y2="316"/>
+    <line x1="240" y1="213" x2="240" y2="306"/>
+    <line x1="248" y1="266" x2="248" y2="330"/>
+    <line x1="240" y1="233" x2="240" y2="316"/>
+  </g>
+
+  <!-- Drop lines: Docker cluster -->
+  <g stroke="#40302a" stroke-width="0.8" stroke-dasharray="3,2">
+    <line x1="362" y1="322" x2="362" y2="335"/>
+    <line x1="359" y1="305" x2="359" y2="327"/>
+  </g>
+
+  <!-- Dashed halo: enrollment cluster -->
+  <ellipse cx="245" cy="238" rx="24" ry="42"
+           fill="rgba(42,90,70,0.08)" stroke="#2a5a46" stroke-width="1.4"
+           stroke-dasharray="6,4" transform="rotate(-8,245,238)"/>
+
+  <!-- Dashed halo: Docker cluster -->
+  <ellipse cx="361" cy="314" rx="20" ry="14"
+           fill="rgba(90,42,30,0.10)" stroke="#5a3a2a" stroke-width="1.4"
+           stroke-dasharray="6,4"/>
+
+  <!-- D1-D5 documents (small squares, green) -->
+  <rect x="242" y="206" width="8" height="8" fill="#1a3d28" stroke="#3a7a52" stroke-width="1.2" rx="1"/>
+  <text x="253" y="214" fill="#3a8a58" font-size="10" font-family="monospace">D1</text>
+
+  <rect x="242" y="225" width="8" height="8" fill="#1a3d28" stroke="#3a7a52" stroke-width="1.2" rx="1"/>
+  <text x="253" y="233" fill="#3a8a58" font-size="10" font-family="monospace">D2</text>
+
+  <rect x="236" y="209" width="8" height="8" fill="#1a3d28" stroke="#3a7a52" stroke-width="1.2" rx="1"/>
+  <text x="218" y="217" fill="#3a8a58" font-size="10" font-family="monospace">D3</text>
+
+  <rect x="244" y="262" width="8" height="8" fill="#1a3d28" stroke="#3a7a52" stroke-width="1.2" rx="1"/>
+  <text x="255" y="270" fill="#3a8a58" font-size="10" font-family="monospace">D4</text>
+
+  <rect x="236" y="229" width="8" height="8" fill="#1a3d28" stroke="#3a7a52" stroke-width="1.2" rx="1"/>
+  <text x="218" y="237" fill="#3a8a58" font-size="10" font-family="monospace">D5</text>
+
+  <!-- enroll -->
+  <circle cx="246" cy="239" r="5.5" fill="#1e3d6a" stroke="#4a9eff" stroke-width="1.8"/>
+  <text x="255" y="244" fill="#88ccff" font-size="11" font-family="monospace">enroll</text>
+
+  <!-- join -->
+  <circle cx="248" cy="260" r="5.5" fill="#1e3d6a" stroke="#4a9eff" stroke-width="1.8"/>
+  <text x="257" y="265" fill="#88ccff" font-size="11" font-family="monospace">join</text>
+
+  <!-- q1 -->
+  <circle cx="246" cy="223" r="4.5" fill="#3a1e5a" stroke="#9966cc" stroke-width="1.5"/>
+  <text x="229" y="221" fill="#cc99ff" font-size="10" font-family="monospace">q1</text>
+
+  <!-- q2 -->
+  <circle cx="248" cy="250" r="4.5" fill="#3a1e5a" stroke="#9966cc" stroke-width="1.5"/>
+  <text x="256" y="255" fill="#cc99ff" font-size="10" font-family="monospace">q2</text>
+
+  <!-- Docker -->
+  <circle cx="362" cy="322" r="5.5" fill="#5a1e10" stroke="#cc5533" stroke-width="1.8"/>
+  <text x="371" y="327" fill="#ff9977" font-size="11" font-family="monospace">Docker</text>
+
+  <!-- q3 -->
+  <circle cx="359" cy="305" r="4.5" fill="#4a3010" stroke="#bb9922" stroke-width="1.5"/>
+  <text x="341" y="303" fill="#ffdd88" font-size="10" font-family="monospace">q3</text>
+
+  <!-- Distance line between clusters -->
+  <line x1="270" y1="248" x2="340" y2="308" stroke="#33334a" stroke-width="1.2" stroke-dasharray="5,4"/>
+  <text x="283" y="283" fill="#44445a" font-size="9" font-family="sans-serif"
+        transform="rotate(42,283,283)">large distance</text>
+
+  <!-- Cluster annotations -->
+  <text x="172" y="194" fill="#2a6a4a" font-size="10" font-family="sans-serif" font-style="italic">semantically</text>
+  <text x="176" y="205" fill="#2a6a4a" font-size="10" font-family="sans-serif" font-style="italic">similar</text>
+  <text x="395" y="338" fill="#6a3a22" font-size="10" font-family="sans-serif" font-style="italic">unrelated</text>
+
+  <!-- Legend -->
+  <rect x="122" y="83" width="128" height="100" fill="#14142a" rx="6" stroke="#2a2a44" stroke-width="1"/>
+  <text x="132" y="101" fill="#aaaacc" font-size="11" font-family="sans-serif" font-weight="bold">Legend</text>
+  <circle cx="138" cy="115" r="4.5" fill="#1e3d6a" stroke="#4a9eff" stroke-width="1.5"/>
+  <text x="147" y="119" fill="#88ccff" font-size="10" font-family="sans-serif">word</text>
+  <circle cx="138" cy="132" r="4" fill="#3a1e5a" stroke="#9966cc" stroke-width="1.5"/>
+  <text x="147" y="136" fill="#cc99ff" font-size="10" font-family="sans-serif">query</text>
+  <rect x="134" y="144" width="8" height="8" fill="#1a3d28" stroke="#3a7a52" stroke-width="1.2" rx="1"/>
+  <text x="147" y="152" fill="#3a8a58" font-size="10" font-family="sans-serif">document</text>
+  <circle cx="138" cy="167" r="4.5" fill="#5a1e10" stroke="#cc5533" stroke-width="1.5"/>
+  <text x="147" y="171" fill="#ff9977" font-size="10" font-family="sans-serif">unrelated</text>
+
+</svg>

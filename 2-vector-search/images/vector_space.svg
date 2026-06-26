@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 420" width="600" height="420">
+  <!-- Background -->
+  <rect width="600" height="420" fill="#1e1e2e" rx="12"/>
+
+  <!-- Grid lines (subtle) -->
+  <g stroke="#2a2a3e" stroke-width="1">
+    <line x1="60" y1="40" x2="60" y2="360"/>
+    <line x1="60" y1="360" x2="560" y2="360"/>
+    <line x1="160" y1="40" x2="160" y2="360"/>
+    <line x1="260" y1="40" x2="260" y2="360"/>
+    <line x1="360" y1="40" x2="360" y2="360"/>
+    <line x1="460" y1="40" x2="460" y2="360"/>
+    <line x1="60" y1="140" x2="560" y2="140"/>
+    <line x1="60" y1="240" x2="560" y2="240"/>
+  </g>
+
+  <!-- Axes -->
+  <g stroke="#4a4a6a" stroke-width="1.5">
+    <line x1="60" y1="360" x2="560" y2="360"/>
+    <line x1="60" y1="40"  x2="60"  y2="360"/>
+    <polygon points="556,355 564,360 556,365" fill="#4a4a6a"/>
+    <polygon points="55,44  60,36  65,44"    fill="#4a4a6a"/>
+  </g>
+  <text x="570" y="364" fill="#6a6a8a" font-size="12" font-family="monospace">dim 1</text>
+  <text x="30"  y="32"  fill="#6a6a8a" font-size="12" font-family="monospace">dim 2</text>
+
+  <!-- ── Cluster: enroll / join / q1 / q2 / D1-D5 ── -->
+  <!-- D1-D5 documents (small squares, muted green) -->
+  <rect x="172" y="112" width="10" height="10" fill="#2d6a4f" stroke="#52b788" stroke-width="1" rx="2"/>
+  <text x="185" y="121" fill="#52b788" font-size="11" font-family="monospace">D1</text>
+  <rect x="190" y="130" width="10" height="10" fill="#2d6a4f" stroke="#52b788" stroke-width="1" rx="2"/>
+  <text x="203" y="139" fill="#52b788" font-size="11" font-family="monospace">D2</text>
+  <rect x="158" y="145" width="10" height="10" fill="#2d6a4f" stroke="#52b788" stroke-width="1" rx="2"/>
+  <text x="171" y="154" fill="#52b788" font-size="11" font-family="monospace">D3</text>
+  <rect x="200" y="150" width="10" height="10" fill="#2d6a4f" stroke="#52b788" stroke-width="1" rx="2"/>
+  <text x="213" y="159" fill="#52b788" font-size="11" font-family="monospace">D4</text>
+  <rect x="175" y="162" width="10" height="10" fill="#2d6a4f" stroke="#52b788" stroke-width="1" rx="2"/>
+  <text x="188" y="171" fill="#52b788" font-size="11" font-family="monospace">D5</text>
+
+  <!-- "enroll" point -->
+  <circle cx="210" cy="185" r="6" fill="#4a9eff" stroke="#88ccff" stroke-width="1.5"/>
+  <text x="220" y="190" fill="#88ccff" font-size="13" font-family="monospace">enroll</text>
+
+  <!-- "join" point -->
+  <circle cx="235" cy="200" r="6" fill="#4a9eff" stroke="#88ccff" stroke-width="1.5"/>
+  <text x="245" y="205" fill="#88ccff" font-size="13" font-family="monospace">join</text>
+
+  <!-- q1 point -->
+  <circle cx="195" cy="205" r="5" fill="#9b6bc4" stroke="#cc99ff" stroke-width="1.5"/>
+  <text x="175" y="220" fill="#cc99ff" font-size="11" font-family="monospace">q1</text>
+
+  <!-- q2 point -->
+  <circle cx="220" cy="220" r="5" fill="#9b6bc4" stroke="#cc99ff" stroke-width="1.5"/>
+  <text x="228" y="230" fill="#cc99ff" font-size="11" font-family="monospace">q2</text>
+
+  <!-- Dashed circle around the cluster -->
+  <circle cx="200" cy="175" r="72" fill="none" stroke="#3a5a6a" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <text x="125" y="90" fill="#3a7a8a" font-size="11" font-family="sans-serif" font-style="italic">semantically similar</text>
+
+  <!-- ── Distant cluster: Docker / q3 ── -->
+  <!-- "Docker" point -->
+  <circle cx="460" cy="300" r="6" fill="#e07b5a" stroke="#ffaa88" stroke-width="1.5"/>
+  <text x="470" y="305" fill="#ffaa88" font-size="13" font-family="monospace">Docker</text>
+
+  <!-- q3 point -->
+  <circle cx="440" cy="320" r="5" fill="#c8a030" stroke="#ffdd88" stroke-width="1.5"/>
+  <text x="450" y="330" fill="#ffdd88" font-size="11" font-family="monospace">q3</text>
+
+  <!-- Dashed circle around Docker cluster -->
+  <circle cx="455" cy="308" r="38" fill="none" stroke="#5a3a2a" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <text x="390" y="372" fill="#7a4a3a" font-size="11" font-family="sans-serif" font-style="italic">semantically distant</text>
+
+  <!-- Distance arrow between clusters -->
+  <line x1="275" y1="205" x2="418" y2="290" stroke="#555577" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="318" y="240" fill="#666688" font-size="11" font-family="sans-serif">large distance</text>
+
+  <!-- Legend -->
+  <rect x="390" y="42" width="160" height="90" fill="#16162a" rx="6" stroke="#2a2a4a" stroke-width="1"/>
+  <text x="400" y="60" fill="#aaaacc" font-size="12" font-family="sans-serif" font-weight="bold">Legend</text>
+  <circle cx="405" cy="75" r="5" fill="#4a9eff" stroke="#88ccff" stroke-width="1.5"/>
+  <text x="415" y="79" fill="#88ccff" font-size="11" font-family="sans-serif">word</text>
+  <circle cx="405" cy="93" r="5" fill="#9b6bc4" stroke="#cc99ff" stroke-width="1.5"/>
+  <text x="415" y="97" fill="#cc99ff" font-size="11" font-family="sans-serif">query</text>
+  <rect x="400" y="106" width="9" height="9" fill="#2d6a4f" stroke="#52b788" stroke-width="1" rx="1"/>
+  <text x="415" y="115" fill="#52b788" font-size="11" font-family="sans-serif">document</text>
+
+  <!-- Title -->
+  <text x="60" y="400" fill="#555577" font-size="11" font-family="sans-serif">2D projection of embedding space (high-dimensional in reality)</text>
+</svg>
