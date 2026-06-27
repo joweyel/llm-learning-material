@@ -513,3 +513,475 @@ Both keyword-RAG and vector-RAG give a correct answer here. The difference shows
 | Filter         | `filter_dict={"course": ...}`     | same                             |
 
 Because RAG is a pipeline of independent steps, swapping the retrieval backend required writing exactly one method override.
+
+---
+
+### 2.7 Vector Search with `sqlitesearch`
+
+`minsearch` has three limitations that show up when moving beyond notebook experiments:
+
+1. **Rebuilds on every startup** — embedding 1350 documents takes ~1 minute on CPU. Doing that on each application start is unacceptable.
+2. **In-memory only** — everything lives in RAM. A larger dataset would not fit.
+3. **Brute-force search** — for every query, the query vector is compared against every single document. At 1 000 documents this is fast, but it does not scale.
+
+#### NN vs ANN
+
+What we have built so far is **exact nearest-neighbor (NN) search**: compute the dot product against all documents and pick the top results. It always finds the true best matches, but it touches everything.
+
+**Approximate nearest-neighbor (ANN) search** takes a shortcut: first identify a region of likely candidates, then score only within that region. It may occasionally miss the absolute best match, but the results are good and it is much faster at scale.
+
+![NN (exact) vs ANN (approximate) vector search](images/nn_vs_ann.svg)
+
+- **`Left panel`**: every document is scored against the query (expensive). 
+- **`Right panel`**: a candidate region is identified first; only documents inside it are scored. The top-5 results (green) are identical, but ANN skips the grey points entirely.
+
+`sqlitesearch` uses ANN strategies internally. It supports three modes:
+
+| Mode   | Scale       | Algorithm                               |
+| ------ | ----------- | --------------------------------------- |
+| `lsh`  | up to ~100K | random hyperplane projections (default) |
+| `ivf`  | 10K – 500K  | K-means clustering                      |
+| `hnsw` | 10K – 1M+   | proximity graph (highest recall)        |
+
+All modes do two-phase search: ANN candidate retrieval, then exact cosine reranking on the shortlist.
+
+#### The ingestion / deployment split
+
+Embedding the full dataset is done once, offline. The result is persisted to a SQLite file. The application then starts instantly by opening the existing index, without re-embedding.
+
+```mermaid
+flowchart LR
+    subgraph ING["Ingestion (run once)"]
+        DOCS["FAQ Documents"]
+        EMB1["Embedding Model"]
+        DOCS --> EMB1
+    end
+
+    DB[("faq_vectors.db")]
+    EMB1 --> DB
+
+    subgraph DEPLOY["Deployment (each query)"]
+        Q["User Query"]
+        EMB2["Embedding Model"]
+        SEARCH["ANN Search"]
+        ANS["RAG Answer"]
+        Q --> EMB2 --> SEARCH --> ANS
+    end
+
+    DB --> SEARCH
+
+    classDef ingest fill:#d5e8d4,stroke:#82b366,color:#2a2a2a
+    classDef deploy fill:#fff2cc,stroke:#d6b656,color:#2a2a2a
+    classDef db     fill:#dae8fc,stroke:#6c8ebf,color:#2a2a2a
+    classDef result fill:#ffe6cc,stroke:#d79b00,color:#2a2a2a
+
+    class DOCS,EMB1 ingest
+    class Q,EMB2,SEARCH deploy
+    class DB db
+    class ANS result
+```
+
+**Ingestion** (Part 1 — run once, e.g. `vector_search.ipynb`):
+
+```python
+from sqlitesearch import VectorSearchIndex
+
+vs_index = VectorSearchIndex(
+    keyword_fields=["course"],
+    mode="ivf",
+    db_path="faq_vectors2.db",
+)
+vs_index.fit(vectors, documents)  # persist to disk
+vs_index.close()
+```
+
+The API is identical to `minsearch.VectorSearch` — `keyword_fields`, `.fit()`, `.search()`.
+
+**Deployment** (Part 2 — `vector_search_persistent.ipynb`): open the existing index, no `.fit()` needed:
+
+```python
+import torch
+from sentence_transformers import SentenceTransformer
+from sqlitesearch import VectorSearchIndex
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = SentenceTransformer("all-MiniLM-L6-v2", device=device)
+
+vs_index = VectorSearchIndex(
+    keyword_fields=["course"],
+    mode="ivf",
+    db_path="faq_vectors2.db",
+)
+```
+
+Searching and filtering are the same as before:
+
+```python
+query_vector = model.encode("I just discovered the course. Can I still join it?")
+results = vs_index.search(
+    query_vector,
+    filter_dict={"course": "llm-zoomcamp"},
+    num_results=5,
+)
+```
+
+The embedding model still loads on startup — we need it to encode queries. But all 1350 document embeddings are already on disk; there is no wait.
+
+#### RAG with sqlitesearch
+
+`RAGVector` from section 2.6 works without any changes. Swap the index:
+
+```python
+vector_assistant = RAGVector(
+    embedder=model,
+    index=vs_index,
+    llm_client=openai_client,
+)
+
+vector_assistant.rag("the program has already begun, can I still sign up?")
+# -> 'Yes, you can still join. You can start learning and submitting homework
+#     while the form is open, even if the course has already begun ...'
+
+vector_assistant.rag("whats queen gambit?")
+# -> "I don't know."
+```
+
+The out-of-domain query correctly returns "I don't know." because nothing in the FAQ is semantically close to a chess opening.
+
+#### minsearch vs sqlitesearch
+
+| Feature       | `minsearch.VectorSearch`   | `sqlitesearch.VectorSearchIndex` |
+| ------------- | -------------------------- | -------------------------------- |
+| Storage       | In-memory (NumPy)          | On-disk (SQLite `.db` file)      |
+| Search method | Exact cosine (brute force) | ANN (LSH / IVF / HNSW) + rerank  |
+| Startup cost  | Re-embeds everything       | Opens existing index instantly   |
+| Best for      | Notebooks, experiments     | Projects, persistent deployments |
+
+`sqlitesearch` is a teaching library. Its only runtime dependencies are SQLite (built into Python) and NumPy, so it deploys to any host that supports SQLite at no extra cost. In production you would typically reach for PGVector or a dedicated vector database instead — which is what we cover next.
+
+---
+
+### 2.8 Vector Search with PGVector
+
+Many databases support vector search: Elasticsearch has it built in, and there are dedicated stores like Qdrant and Chroma. This lesson uses **PostgreSQL** via the [pgvector](https://github.com/pgvector/pgvector) extension. Postgres is ubiquitous — most teams already run it — and pgvector gives it all the vector search capabilities of a specialized store without adding another service.
+
+```mermaid
+flowchart LR
+    subgraph OFFLINE["Offline (indexing)"]
+        DOCS["Documents"]
+        MODEL["Embedding Model\nall-MiniLM-L6-v2"]
+        DOCS --> MODEL
+        MODEL -->|"vec_to_str(vector)"| PG
+    end
+
+    subgraph POSTGRES["PostgreSQL + pgvector"]
+        PG[("documents\ncourse TEXT\nsection TEXT\nquestion TEXT\nanswer TEXT\nembedding vector(384)")]
+        IDX["HNSW Index\nvector_cosine_ops"]
+        PG --- IDX
+    end
+
+    subgraph ONLINE["Online (querying)"]
+        Q["User Query"]
+        QM["Embedding Model"]
+        QV["Query Vector"]
+        APP["Application\nRAGPgVector"]
+        Q --> QM --> QV
+        QV -->|"ORDER BY embedding <=> query::vector"| PG
+        PG -->|"Top-K rows"| APP
+    end
+
+    classDef offlineNode fill:#d5e8d4,stroke:#82b366,color:#2a2a2a
+    classDef pgNode      fill:#dae8fc,stroke:#6c8ebf,color:#2a2a2a
+    classDef onlineNode  fill:#fff2cc,stroke:#d6b656,color:#2a2a2a
+
+    class DOCS,MODEL offlineNode
+    class PG,IDX pgNode
+    class Q,QM,QV,APP onlineNode
+
+    style OFFLINE  fill:#eaf4ea,stroke:#82b366,color:#2a2a2a
+    style POSTGRES fill:#edf4fc,stroke:#6c8ebf,color:#2a2a2a
+    style ONLINE   fill:#fffde7,stroke:#d6b656,color:#2a2a2a
+```
+
+#### Starting Postgres with pgvector
+
+The `pgvector/pgvector:pg17` Docker image ships with the extension pre-installed:
+
+```bash
+docker run -it \
+    --name pgvector \
+    -e POSTGRES_USER=user \
+    -e POSTGRES_PASSWORD=pswd \
+    -e POSTGRES_DB=faq \
+    -v pgvector_data:/var/lib/postgresql/data \
+    -p 5432:5432 \
+    pgvector/pgvector:pg17
+```
+
+The `-v` flag creates a named volume so data survives container restarts.
+
+Install the Python driver:
+
+```bash
+uv add psycopg[binary]
+```
+
+#### Connecting and activating the extension
+
+```python
+import psycopg
+
+conn = psycopg.connect("postgresql://user:pswd@localhost:5432/faq")
+conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+```
+
+`CREATE EXTENSION` turns on pgvector. It adds the `vector` column type and the similarity operators (`<=>`, `<#>`, `<->`) to the database.
+
+#### Creating the table
+
+```python
+conn.execute("DROP TABLE IF EXISTS documents")
+
+conn.execute("""
+    CREATE TABLE documents (
+        id        SERIAL PRIMARY KEY,
+        course    TEXT,
+        section   TEXT,
+        question  TEXT,
+        answer    TEXT,
+        embedding vector(384)
+    )
+""")
+```
+
+`vector(384)` is the pgvector column type — a fixed-length array of 384 floats, matching our `all-MiniLM-L6-v2` output.
+
+#### Inserting documents with embeddings
+
+Postgres does not accept NumPy arrays directly. We convert each vector to a string first:
+
+```python
+def vec_to_str(vector):
+    return "[" + ",".join(str(x) for x in vector) + "]"
+
+for doc, vec in tqdm(zip(documents, vectors), total=len(documents)):
+    conn.execute(
+        """
+        INSERT INTO documents (course, section, question, answer, embedding)
+        VALUES (%s, %s, %s, %s, %s::vector)
+        """,
+        (doc["course"], doc["section"], doc["question"], doc["answer"],
+         vec_to_str(vec)),
+    )
+
+conn.commit()
+```
+
+The `::vector` cast tells Postgres to parse the string as a vector. `conn.commit()` persists the transaction.
+
+#### Searching with cosine similarity
+
+Encode the query and search:
+
+```python
+query = "I just discovered the course. Can I still join it?"
+query_str = vec_to_str(model.encode(query))
+
+results = conn.execute(
+    """
+    SELECT course, question, answer,
+           1 - (embedding <=> %s::vector) AS similarity
+    FROM documents
+    ORDER BY embedding <=> %s::vector
+    LIMIT 5
+    """,
+    (query_str, query_str)
+).fetchall()
+```
+
+The `<=>` operator returns **cosine distance** (1 - cosine similarity). Ordering by ascending distance surfaces the most similar documents first. The `1 - (embedding <=> ...)` expression converts it back to a similarity score for display.
+
+Results:
+
+```
+[llm-zoomcamp]             I just discovered the course. Can I still join?        (similarity: 0.8365)
+[machine-learning-zoomcamp] The course has already started. Can I still join it?  (similarity: 0.6904)
+[mlops-zoomcamp]           Course - Can I still join the course after the start?  (similarity: 0.6043)
+[data-engineering-zoomcamp] Course: Can I still join the course after the start?  (similarity: 0.5959)
+```
+
+#### Filtering by course
+
+Filtering is a plain SQL `WHERE` clause:
+
+```python
+results = conn.execute(
+    """
+    SELECT course, question, answer,
+           1 - (embedding <=> %s::vector) AS similarity
+    FROM documents
+    WHERE course = %s
+    ORDER BY embedding <=> %s::vector
+    LIMIT 5
+    """,
+    (query_str, "llm-zoomcamp", query_str)
+).fetchall()
+```
+
+Three parameters here: query vector appears twice (for the SELECT expression and for ORDER BY), course appears once.
+
+#### HNSW index for faster search
+
+The queries above run brute-force over all rows. For larger datasets, create an HNSW index:
+
+```python
+conn.execute("""
+    CREATE INDEX ON documents
+    USING hnsw (embedding vector_cosine_ops)
+""")
+```
+
+This is the same HNSW algorithm from section 2.7. After the index is built, Postgres switches from brute-force to ANN automatically. No changes to the query are needed.
+
+#### Wrapping search in a function
+
+```python
+def pgvector_search(query, course="llm-zoomcamp", num_results=5):
+    query_vector = model.encode(query)
+    query_str = vec_to_str(query_vector)
+    rows = conn.execute(
+        """
+        SELECT course, section, question, answer
+        FROM documents
+        WHERE course = %s
+        ORDER BY embedding <=> %s::vector
+        LIMIT %s
+        """,
+        (course, query_str, num_results)
+    ).fetchall()
+    return [
+        {"course": r[0], "section": r[1], "question": r[2], "answer": r[3]}
+        for r in rows
+    ]
+```
+
+#### RAG with PGVector
+
+`RAGPgVector` overrides `search()` to use the Postgres connection instead of an index object. We set `index=None` because `RAGBase.__init__` requires the argument but we never use it:
+
+```python
+from rag_helper import RAGBase
+
+class RAGPgVector(RAGBase):
+
+    def __init__(self, embedder, conn, **kwargs):
+        super().__init__(index=None, **kwargs)
+        self.embedder = embedder
+        self.conn = conn
+
+    def search(self, query, num_results=5):
+        query_vector = self.embedder.encode(query)
+        query_str = vec_to_str(query_vector)
+        rows = self.conn.execute(
+            """
+            SELECT course, section, question, answer
+            FROM documents
+            WHERE course = %s
+            ORDER BY embedding <=> %s::vector
+            LIMIT %s
+            """,
+            (self.course, query_str, num_results)
+        ).fetchall()
+        return [
+            {"course": r[0], "section": r[1], "question": r[2], "answer": r[3]}
+            for r in rows
+        ]
+```
+
+```python
+vector_assistant = RAGPgVector(
+    embedder=model,
+    conn=conn,
+    llm_client=openai_client,
+)
+
+vector_assistant.rag("the program has already begun, can I still sign up?")
+# -> 'Yes, you can still join even if the program has already begun.
+#     If you want a certificate, make sure to submit your project while
+#     submissions are still open.'
+```
+
+#### All three backends compared
+
+| Feature       | `minsearch`         | `sqlitesearch`              | PGVector                            |
+| ------------- | ------------------- | --------------------------- | ----------------------------------- |
+| Storage       | In-memory           | SQLite file                 | PostgreSQL database                 |
+| Setup         | None                | None                        | Docker + psycopg                    |
+| Search method | Exact (brute force) | ANN (LSH/IVF/HNSW) + rerank | Brute force; HNSW index optional    |
+| Persistence   | No                  | Yes                         | Yes                                 |
+| Filtering     | `filter_dict`       | `filter_dict`               | SQL `WHERE`                         |
+| Concurrency   | No                  | Limited                     | Yes (full ACID)                     |
+| Best for      | Notebooks           | Pet projects, free tiers    | Production, existing Postgres infra |
+
+---
+
+### 2.9 ONNX Embedder (Optional)
+
+`sentence-transformers` pulls in PyTorch and a pile of NVIDIA libraries. ONNX Runtime serves the same model without that weight:
+
+| Setup                 | Size   | Packages |
+| --------------------- | ------ | -------- |
+| sentence-transformers | 4.8 GB | 58       |
+| ONNX Runtime          | 147 MB | 27       |
+
+33x smaller, identical embeddings. Worth it for production deployments; for notebooks, sentence-transformers is fine.
+
+The ONNX workflow lives in [`code/llm-zoomcamp-onnx/`](./code/llm-zoomcamp-onnx/) and the notebook [`vector_search_onnx.ipynb`](./code/llm-zoomcamp-onnx/vector_search_onnx.ipynb) walks through the full pipeline.
+
+**How `Embedder` works internally:**
+
+1. `Tokenize`: text to integer IDs + attention mask
+2. `ONNX inference`: run the model graph on CPU
+3. `Mean pooling`: average token embeddings weighted by attention mask
+4. `L2 normalize`: divide by L2 norm so dot product equals cosine similarity
+
+The `encode` / `encode_batch` interface is identical to `SentenceTransformer.encode()`, so the rest of the pipeline is unchanged.
+
+---
+
+### 2.10 Next Steps
+
+**What we built in this module:**
+
+- Learned what embeddings are and how they turn text into vectors
+- Generated embeddings using `sentence-transformers` (`all-MiniLM-L6-v2`, 384 dimensions)
+- Built vector search with NumPy, `minsearch`, `sqlitesearch`, and PGVector
+- Integrated vector search into the RAG pipeline via `RAGVector` and `RAGPgVector`
+
+#### When to use vector search
+
+Text search is simple, fast, and sufficient for many applications. Start there.
+
+Vector search adds real overhead: you need an embedding model, you need to compute and store embeddings, and at query time you encode the query before you can search. Don't take it on without a reason.
+
+A reasonable progression:
+
+| Version | Approach | When to move on |
+| --- | --- | --- |
+| v1 | Text search (keyword) | When users phrase queries differently from documents |
+| v2 | Vector search (semantic) | When evaluation shows a meaningful improvement |
+| v3 | Hybrid search (text + vector) | Typically outperforms either alone; covered in Module 6 |
+
+The right time to move from one version to the next is when evaluation shows it is justified. A later module covers how to measure retrieval quality. With numbers in hand you can tell a marginal gain from a real one.
+
+#### Hybrid search and reranking
+
+Once you have both, you can combine them. **Hybrid search** (e.g. Reciprocal Rank Fusion) merges results from both methods. **Reranking** adds a second model that re-scores the retrieved candidates for relevance. Both are covered in Module 6 (Best Practices).
+
+#### What to try next
+
+- Compare text search and vector search on your own data
+- Experiment with different embedding models (see the table in section 2.9)
+- Try PGVector with a larger dataset and benchmark the HNSW index
+- Explore other vector databases: Elasticsearch, Qdrant, Weaviate, Chroma. The concepts are the same: embed documents, store vectors, search by similarity
+

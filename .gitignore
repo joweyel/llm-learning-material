@@ -221,3 +221,5 @@ __marimo__/
 **/*.db
 **/*.db-shm
 **/*.db-wal
+
+2-vector-search/code/llm-zoomcamp-onnx/models/
